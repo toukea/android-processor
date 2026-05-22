@@ -20,9 +20,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 //TODO thing about ProcessManager.Plugin
 //TODO permettre de lancer des Process qui embarque en eux l'execution de plusieurs autre process (avec possibilité de créer des sous ProcessManager dans lequel il tourne ces sous Process)
 public final class ProcessManager {
-    static final ConcurrentHashMap<String, Process> globalProcessQueue = new ConcurrentHashMap();
-    final ConcurrentHashMap<String, Process> processQueue = new ConcurrentHashMap();
-    final ConcurrentLinkedQueue<ProcessListener> processListeners = new ConcurrentLinkedQueue();
+    static final ConcurrentHashMap<String, Process> globalProcessQueue = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, Process> processQueue = new ConcurrentHashMap<>();
+    final ConcurrentLinkedQueue<ProcessListener> processListeners = new ConcurrentLinkedQueue<>();
     private static final int SIZE_GENERATED_PID = 16;
     private final String nameSpace;
 
@@ -82,6 +82,23 @@ public final class ProcessManager {
         return list;
     }
 
+    public boolean isBusy() {
+        return !processQueue.isEmpty();
+    }
+
+    public void listenForIdleState(Runnable runnable) {
+        if (runnable == null) {
+            return;
+        }
+        List<Process> processList = getRunningProcess();
+        if (processList.isEmpty()) {
+            runnable.run();
+            return;
+        }
+        Process<?,?> firstProcess = processList.get(0);
+        firstProcess.finish(data -> listenForIdleState(runnable));
+    }
+
     public <T extends Process<?, ?>> List<T> getRunningProcess(Class<T> filterClass) {
         return getRunningProcess(filterClass, false);
     }
@@ -124,10 +141,12 @@ public final class ProcessManager {
      * @throws ProcessException if given id is already used inside the manager
      */
     public final <T extends Process> T execute(String PID, T process, Object... vars) throws ProcessException {
-        if (isRunningPID(PID)) {
-            throw new ProcessException("Sorry, a running process with same PID alrady running");
+        if (PID != null) {
+            if (isRunningPID(PID)) {
+                throw new ProcessException("Sorry, a running process with same PID alrady running");
+            }
+            process.setId(PID);
         }
-        process.setId(PID);
         return execute(process, vars);
     }
 
@@ -187,7 +206,7 @@ public final class ProcessManager {
     }
 
     public <T extends Process<?, ?>> T getProcessById(String PID, Class<T> cLass) {
-        Process<?,?> p = getProcessById(PID);
+        Process<?, ?> p = getProcessById(PID);
         if (p != null && cLass == p.getClass()) {
             return (T) p;
         }

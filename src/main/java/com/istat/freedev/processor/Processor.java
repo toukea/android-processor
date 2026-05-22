@@ -71,6 +71,14 @@ public class Processor {
         return boot(processorTag);
     }
 
+    public static Processor getOrThrow(String tag) {
+        Processor output = get(tag);
+        if (output == null) {
+            throw new IllegalStateException("There is no Processor instance with tag =" + tag);
+        }
+        return output;
+    }
+
     public final static Processor get(String processorTag) {
         if (nameProcessorMap.containsKey(processorTag)) {
             return nameProcessorMap.get(processorTag);
@@ -113,6 +121,9 @@ public class Processor {
     }
 
     public ProcessManager getProcessManager() {
+        if (processManager == null) {
+            throw new IllegalStateException("Thr ProcessManager can't be Null at this stage");
+        }
         return processManager;
     }
 
@@ -126,7 +137,7 @@ public class Processor {
 
     public final static ProcessManager getProcessManager(String processorTag) {
         Processor processor = null;
-        if (nameProcessorMap.contains(processorTag)) {
+        if (nameProcessorMap.containsKey(processorTag)) {
             processor = nameProcessorMap.get(processorTag);
         }
         if (processor != null) {

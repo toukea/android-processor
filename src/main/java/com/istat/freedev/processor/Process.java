@@ -35,8 +35,8 @@ public abstract class Process<Result, Error extends Throwable> {
     Error error;
     Throwable exception;
     String id;
-    final ConcurrentHashMap<PromiseCallback, Runnable> promiseRunnableMap = new ConcurrentHashMap<>();
-    final ConcurrentLinkedQueue<ProcessCallback<Result, Error>> processCallbacks = new ConcurrentLinkedQueue();
+    final ConcurrentHashMap<PromiseCallback<?>, Runnable> promiseRunnableMap = new ConcurrentHashMap<>();
+    final ConcurrentLinkedQueue<ProcessCallback<Result, Error>> processCallbacks = new ConcurrentLinkedQueue<>();
     private long startingTime = -1, finishTime = -1;
     private Object[] executionVariableArray = new Object[0];
     ProcessManager manager;
@@ -384,16 +384,14 @@ public abstract class Process<Result, Error extends Throwable> {
 
     final ConcurrentLinkedQueue<Runnable> executedRunnable = new ConcurrentLinkedQueue<Runnable>();
     //    final ConcurrentHashMap<Integer, ConcurrentLinkedQueue<Runnable>> memoryRunnableTask = new ConcurrentHashMap<Integer, ConcurrentLinkedQueue<Runnable>>();
-    final ConcurrentHashMap<Integer, ConcurrentLinkedQueue<Runnable>> runnableTask = new ConcurrentHashMap();
+    final ConcurrentHashMap<Integer, ConcurrentLinkedQueue<Runnable>> runnableTask = new ConcurrentHashMap<>();
 
-    public <T extends Process> T promise(final PromiseCallback<T> callback, int... when) {
+    public <T extends Process<Result, Error>> T promise(final PromiseCallback<T> callback, int... when) {
         if (callback != null) {
             Runnable runnable = new Runnable() {
                 @Override
                 public void run() {
-                    if (callback != null) {
-                        callback.onPromise((T) Process.this);
-                    }
+                    callback.onPromise((T) Process.this);
                 }
             };
             promiseRunnableMap.put(callback, runnable);
@@ -619,11 +617,17 @@ public abstract class Process<Result, Error extends Throwable> {
     }
 
     private void executePromises(ConcurrentLinkedQueue<Runnable> runnableList) {
-        if (!jeopardise && runnableList != null && runnableList.size() > 0) {
+        executePromises(runnableList, false);
+    }
+
+    private void executePromises(ConcurrentLinkedQueue<Runnable> runnableList, boolean allowRunnableMultipleExecution) {
+        if (!jeopardise && runnableList != null && !runnableList.isEmpty()) {
             for (Runnable runnable : runnableList) {
                 if (!executedRunnable.contains(runnable)) {
                     runnable.run();
                     executedRunnable.add(runnable);
+                } else if (allowRunnableMultipleExecution) {
+                    runnable.run();
                 }
             }
         }
@@ -706,18 +710,15 @@ public abstract class Process<Result, Error extends Throwable> {
             this.state = STATE_SUCCESS;
             this.result = result;
             this.running = false;
-            post(new Runnable() {
-                @Override
-                public void run() {
-                    notifyFinished(STATE_SUCCESS);
-                    for (ProcessCallback<Result, Error> executionListener : processCallbacks) {
-                        executionListener.onSuccess(/*Process.this,*/ result);
-                    }
-                    ConcurrentLinkedQueue<Runnable> runnableList = runnableTask.get(STATE_SUCCESS);
-                    executePromises(runnableList);
-                    onStateChanged(state);
-                    onSucceed(result);
+            post(() -> {
+                notifyFinished(STATE_SUCCESS);
+                for (ProcessCallback<Result, Error> executionListener : processCallbacks) {
+                    executionListener.onSuccess(/*Process.this,*/ result);
                 }
+                ConcurrentLinkedQueue<Runnable> runnableList = runnableTask.get(STATE_SUCCESS);
+                executePromises(runnableList);
+                onStateChanged(state);
+                onSucceed(result);
             });
         }
     }
@@ -726,26 +727,27 @@ public abstract class Process<Result, Error extends Throwable> {
         notifyStateChanged(state, false);
     }
 
-    //TODO il serait telement cool de pouvoir fair transiter un PayLoad ici.
     protected final void notifyStateChanged(final int state, final boolean finished) {
+        notifyStateChanged(state, finished, false);
+    }
+
+    //TODO il serait telement cool de pouvoir fair transiter un PayLoad ici.
+    protected final void notifyStateChanged(final int state, final boolean finished, boolean allowRunnableMultipleExecution) {
         if (!jeopardise && running) {
             this.state = state;
             if (finished) {
                 this.running = false;
             }
-            post(new Runnable() {
-                @Override
-                public void run() {
-                    if (getManager() != null) {
-                        getManager().notifyProcessStateChanged(Process.this);
-                    }
-                    if (finished) {
-                        notifyFinished(state);
-                    }
-                    ConcurrentLinkedQueue<Runnable> runnableList = runnableTask.get(state);
-                    executePromises(runnableList);
-                    onStateChanged(state);
+            post(() -> {
+                if (getManager() != null) {
+                    getManager().notifyProcessStateChanged(Process.this);
                 }
+                if (finished) {
+                    notifyFinished(state);
+                }
+                ConcurrentLinkedQueue<Runnable> runnableList = runnableTask.get(state);
+                executePromises(runnableList, allowRunnableMultipleExecution);
+                onStateChanged(state);
             });
         }
     }
@@ -1090,6 +1092,37 @@ public abstract class Process<Result, Error extends Throwable> {
                 return 0;
             }
             return Double.valueOf(String.valueOf(var));
+        }
+
+        public <T> T optVariable(int index) {
+            if (executionVariableArray.length <= index) {
+                return null;
+            }
+            try {
+                return (T) executionVariableArray[index];
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        public <T> T optVariable(int index, Class<T> cLass) {
+            return optVariable(index, cLass, null);
+        }
+
+        public <T> T optVariable(int index, Class<T> cLass, T defaultValue) {
+            if (executionVariableArray.length <= index) {
+                return defaultValue;
+            }
+            Object var = executionVariableArray[index];
+            if (var == null) {
+                return defaultValue;
+            }
+            if (cLass.isAssignableFrom(var.getClass())) {
+                return (T) var;
+            } else {
+                return defaultValue;
+            }
         }
 
         public int length() {
