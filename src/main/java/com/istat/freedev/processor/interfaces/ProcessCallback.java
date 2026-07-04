@@ -8,14 +8,14 @@ public interface ProcessCallback<Result, Error extends Throwable> {
     /**
      * called when the process started.
      */
-    void onStart(/*Process<Result, Error> process*/);
+    default void onStart(/*Process<Result, Error> process*/){}
 
     /**
      * called when process is completed
      *
      * @param finishState state if process succeed.
      */
-    void onFinished(/*Process<Result, Error> process, Result result,*/ int finishState);
+    default void onFinished(/*Process<Result, Error> process, Result result,*/ int finishState){}
 
     /**
      * called when the process succeed
@@ -29,19 +29,19 @@ public interface ProcessCallback<Result, Error extends Throwable> {
      *
      * @param error the error rencontered by the process
      */
-    void onError(/*Process<Result, Error> process, */Error error);
+    default void onError(/*Process<Result, Error> process, */Error error){}
 
     /**
      * The process is started. but never running.s
      *
      * @param e the exception that cause the process failed
      */
-    void onFail(/*Process<Result, Error> process,*/ Throwable e);
+    default void onFail(/*Process<Result, Error> process,*/ Throwable e){}
 
     /**
      * called when the process has been aborted.
      */
-    void onAborted(/*Process<Result, Error> process*/);
+    default void onAborted(/*Process<Result, Error> process*/){}
 
 
 }
